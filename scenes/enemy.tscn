@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1"]
+
+[sub_resource type="CapsuleShape2D" id="1"]
+radius = 13.0
+height = 40.0
+
+[sub_resource type="RectangleShape2D" id="2"]
+size = Vector2(32, 44)
+
+[node name="Enemy" type="CharacterBody2D"]
+script = ExtResource("1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("1")
+
+[node name="Sprite" type="ColorRect" parent="."]
+mouse_filter = 2
+position = Vector2(-13, -20)
+size = Vector2(26, 40)
+color = Color(1.0, 0.2, 0.2, 1)
+
+[node name="EdgeRay" type="RayCast2D" parent="."]
+enabled = true
+target_position = Vector2(0, 35)
+
+[node name="DamageZone" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DamageZone"]
+shape = SubResource("2")
