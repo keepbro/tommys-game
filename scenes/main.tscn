@@ -41,6 +41,11 @@ position = Vector2(20, 60)
 text = "Hearts: ♥ ♥ ♥"
 theme_override_font_sizes/font_size = 28
 
+[node name="LevelLabel" type="Label" parent="UI"]
+position = Vector2(1100, 20)
+text = "Level 1"
+theme_override_font_sizes/font_size = 28
+
 [node name="HelpLabel" type="Label" parent="UI"]
 position = Vector2(20, 668)
 text = "WASD / Arrows: Move   Space or W: Jump (2x for double jump!)   Shift: Dash   Mouse: Aim   Left Click: Shoot"
