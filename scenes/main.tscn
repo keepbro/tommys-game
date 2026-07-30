@@ -1,8 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="3"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -17,18 +16,6 @@ z_index = -10
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(100, 640)
 
-[node name="Enemy1" parent="." instance=ExtResource("3")]
-position = Vector2(350, 520)
-
-[node name="Enemy2" parent="." instance=ExtResource("3")]
-position = Vector2(580, 440)
-
-[node name="Enemy3" parent="." instance=ExtResource("3")]
-position = Vector2(860, 265)
-
-[node name="Enemy4" parent="." instance=ExtResource("3")]
-position = Vector2(1100, 310)
-
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="ScoreLabel" type="Label" parent="UI"]
@@ -42,16 +29,17 @@ text = "Hearts: ♥ ♥ ♥"
 theme_override_font_sizes/font_size = 28
 
 [node name="LevelLabel" type="Label" parent="UI"]
-position = Vector2(1100, 20)
+position = Vector2(940, 20)
 text = "Level 1"
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 26
 
 [node name="HelpLabel" type="Label" parent="UI"]
-position = Vector2(20, 668)
-text = "WASD / Arrows: Move   Space or W: Jump (2x for double jump!)   Shift: Dash   Mouse: Aim   Left Click: Shoot"
+position = Vector2(300, 22)
+text = "WASD: Move   Space: Jump (x2!)   Shift: Dash   Click: Shoot   1-5: Use bag"
 theme_override_font_sizes/font_size = 15
 
 [node name="GameOver" type="Label" parent="UI"]
+visible = false
 position = Vector2(480, 320)
 size = Vector2(320, 80)
 text = "GAME OVER!"

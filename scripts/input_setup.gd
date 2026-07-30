@@ -4,6 +4,10 @@ func _ready() -> void:
 	_setup("jump", [_key(KEY_SPACE), _key(KEY_W), _key(KEY_UP)])
 	_setup("dash", [_key(KEY_SHIFT)])
 	_setup("shoot", [_mouse(MOUSE_BUTTON_LEFT)])
+	# Number keys 1-5 use the things in your bag
+	var number_keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]
+	for i in number_keys.size():
+		_setup("slot_%d" % (i + 1), [_key(number_keys[i])])
 	# Add A and D keys to movement
 	InputMap.action_add_event("ui_left", _key(KEY_A))
 	InputMap.action_add_event("ui_right", _key(KEY_D))
