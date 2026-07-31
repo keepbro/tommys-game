@@ -16,23 +16,39 @@ var max_health := 16
 var health := 16
 var facing := -1.0
 
+var home := Vector2.ZERO      # where it started - it climbs back here if it falls
+var fall_limit := 950.0       # below this it has fallen out of the level
+
 var _player: Node2D = null
 var _shoot_timer := 1.8
 var _jump_timer := 3.0
+var _leap_cooldown := 0.0
 var _flash := 0.0
 var _time := 0.0
 var _was_in_air := false
 var _entering := true
+var _stuck_time := 0.0
+var _last_x := 0.0
+var _edge_ray: RayCast2D = null
 
-func _ready() -> void:
-	add_to_group("boss")
-	health = max_health
-
+# shape built before joining the game - see the note in powerup.gd
+func _init() -> void:
 	var cs := CollisionShape2D.new()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(BODY_W, BODY_H)
 	cs.shape = shape
 	add_child(cs)
+
+	# Feels ahead for the edge of the floor so it doesn't walk into pits
+	_edge_ray = RayCast2D.new()
+	_edge_ray.target_position = Vector2(0, 95)
+	add_child(_edge_ray)
+
+func _ready() -> void:
+	add_to_group("boss")
+	health = max_health
+	home = position
+	_last_x = position.x
 
 	Sfx.play("boss_warn")
 	# Big dramatic entrance - can't be hurt for a moment
@@ -51,7 +67,13 @@ func angry() -> bool:
 func _physics_process(delta: float) -> void:
 	_time += delta
 	_flash = maxf(0.0, _flash - delta)
+	_leap_cooldown = maxf(0.0, _leap_cooldown - delta)
 	queue_redraw()
+
+	# Fell out of the level? Climb back up - but it hurts!
+	if global_position.y > fall_limit:
+		_climb_back_out()
+		return
 
 	if not is_on_floor():
 		velocity.y = minf(velocity.y + GRAVITY * delta, 1400.0)
@@ -70,9 +92,21 @@ func _physics_process(delta: float) -> void:
 	if absf(to_player) > 60.0:
 		facing = signf(to_player)
 		var spd := ANGRY_SPEED if angry() else WALK_SPEED
-		velocity.x = move_toward(velocity.x, facing * spd, 900.0 * delta)
+		if _at_edge():
+			# There's a hole in front of it! Leap over instead of falling in.
+			if _leap_cooldown <= 0.0 and is_on_floor():
+				velocity.y = JUMP_FORCE
+				velocity.x = facing * 330.0
+				_leap_cooldown = 1.4
+				Sfx.play("jump", 0.45)
+			else:
+				velocity.x = move_toward(velocity.x, 0.0, 1400.0 * delta)
+		else:
+			velocity.x = move_toward(velocity.x, facing * spd, 900.0 * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, 900.0 * delta)
+
+	_check_if_stuck(delta, to_player)
 
 	# Jump now and then, or if the player is up high
 	_jump_timer -= delta
@@ -90,6 +124,64 @@ func _physics_process(delta: float) -> void:
 		_shoot_timer = 1.2 if angry() else 2.1
 
 	move_and_slide()
+
+# Is there floor in front of us, or a big drop?
+func _at_edge() -> bool:
+	if not is_on_floor():
+		return false
+	_edge_ray.position.x = facing * (BODY_W / 2.0 + 12.0)
+	_edge_ray.force_raycast_update()
+	return not _edge_ray.is_colliding()
+
+# If it can't get anywhere for a few seconds (wedged between pillars, or
+# blocked by a wall) it does a spectacular jump-slam next to the player.
+func _check_if_stuck(delta: float, to_player: float) -> void:
+	# only counts while standing - being in mid-air isn't being stuck!
+	var trying_to_move := absf(to_player) > 90.0 and is_on_floor()
+	if trying_to_move and absf(global_position.x - _last_x) < 3.0:
+		_stuck_time += delta
+	else:
+		_stuck_time = 0.0
+	_last_x = global_position.x
+
+	if _stuck_time > 2.5:
+		_stuck_time = 0.0
+		_slam_next_to_player()
+
+func _slam_next_to_player() -> void:
+	_puff(global_position, Color(0.6, 0.2, 0.8))
+	# drop in from above so it never lands inside a wall
+	global_position = _player.global_position + Vector2(randf_range(-70, 70), -180.0)
+	velocity = Vector2(0, 150.0)
+	_was_in_air = true
+	_puff(global_position, Color(0.9, 0.4, 1.0))
+	Sfx.play("boss_warn", 1.6, -4.0)
+	if is_instance_valid(_player):
+		_player.shake(10.0)
+
+func _climb_back_out() -> void:
+	_puff(global_position, Color(0.5, 0.5, 0.6))
+	global_position = home
+	velocity = Vector2.ZERO
+	_was_in_air = false
+	_stuck_time = 0.0
+	_last_x = home.x
+	_puff(home, Color(0.9, 0.6, 0.2))
+	Sfx.play("boss_warn", 1.3)
+	if is_instance_valid(_player):
+		_player.shake(12.0)
+	# Falling down there really hurt it - free damage for you!
+	take_damage(3)
+
+func _puff(at: Vector2, color: Color) -> void:
+	var Explosion := load("res://scripts/explosion.gd")
+	var burst: Node2D = Explosion.new()
+	burst.colors = [color, Color.WHITE]
+	burst.count = 16
+	burst.speed_max = 340.0
+	burst.ring = true
+	get_tree().current_scene.add_child(burst)
+	burst.global_position = at
 
 func _shoot() -> void:
 	var BossBullet := load("res://scripts/boss_bullet.gd")

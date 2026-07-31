@@ -12,13 +12,16 @@ var lifetime := 3.0
 var _time := 0.0
 var _smoke := 0.0
 
-func _ready() -> void:
-	body_entered.connect(_on_body_entered)
+# shape built before joining the game - see the note in powerup.gd
+func _init() -> void:
 	var cs := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
 	shape.radius = 7.0
 	cs.shape = shape
 	add_child(cs)
+
+func _ready() -> void:
+	body_entered.connect(_on_body_entered)
 	rotation = direction.angle()
 
 func _process(delta: float) -> void:

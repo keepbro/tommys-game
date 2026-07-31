@@ -8,15 +8,17 @@ var direction := Vector2.RIGHT
 var lifetime := 4.0
 var _time := 0.0
 
-func _ready() -> void:
-	add_to_group("boss_bullets")
-	body_entered.connect(_on_body_entered)
-
+# shape built before joining the game - see the note in powerup.gd
+func _init() -> void:
 	var cs := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
 	shape.radius = 10.0
 	cs.shape = shape
 	add_child(cs)
+
+func _ready() -> void:
+	add_to_group("boss_bullets")
+	body_entered.connect(_on_body_entered)
 
 func _process(delta: float) -> void:
 	_time += delta

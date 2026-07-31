@@ -4,6 +4,7 @@ func _ready() -> void:
 	_setup("jump", [_key(KEY_SPACE), _key(KEY_W), _key(KEY_UP)])
 	_setup("dash", [_key(KEY_SHIFT)])
 	_setup("shoot", [_mouse(MOUSE_BUTTON_LEFT)])
+	_setup("pause", [_key(KEY_P)])
 	# Number keys 1-5 use the things in your bag
 	var number_keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]
 	for i in number_keys.size():

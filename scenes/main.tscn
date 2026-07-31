@@ -29,9 +29,9 @@ text = "Hearts: ♥ ♥ ♥"
 theme_override_font_sizes/font_size = 28
 
 [node name="LevelLabel" type="Label" parent="UI"]
-position = Vector2(940, 20)
+position = Vector2(860, 22)
 text = "Level 1"
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 24
 
 [node name="HelpLabel" type="Label" parent="UI"]
 position = Vector2(300, 22)

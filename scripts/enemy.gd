@@ -77,6 +77,11 @@ func _grow(radius: float, height: float, zone: Vector2) -> void:
 	$DamageZone/CollisionShape2D.shape = box
 
 func _physics_process(delta: float) -> void:
+	# Fell down a pit - remove it so it doesn't fall forever
+	if global_position.y > 1100.0:
+		queue_free()
+		return
+
 	_time += delta
 	reverse_cooldown = maxf(0.0, reverse_cooldown - delta)
 	bounce_cooldown = maxf(0.0, bounce_cooldown - delta)

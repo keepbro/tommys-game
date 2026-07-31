@@ -15,16 +15,20 @@ var kind := "heart"
 var _time := 0.0
 var _start_y := 0.0
 
-func _ready() -> void:
-	add_to_group("powerups")
-	_start_y = position.y
-	body_entered.connect(_on_body_entered)
-
+# Built in _init (before it joins the game) because Godot won't let you
+# add a collision shape while it is busy working out physics - which is
+# exactly when chests burst open and monsters drop loot!
+func _init() -> void:
 	var cs := CollisionShape2D.new()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(38, 38)
 	cs.shape = shape
 	add_child(cs)
+
+func _ready() -> void:
+	add_to_group("powerups")
+	_start_y = position.y
+	body_entered.connect(_on_body_entered)
 
 func _process(delta: float) -> void:
 	_time += delta

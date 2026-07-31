@@ -18,14 +18,17 @@ var _flash := 0.0
 var _shake := 0.0
 var _time := 0.0
 
-func _ready() -> void:
-	add_to_group("chests")
+# shape built before joining the game - see the note in powerup.gd
+func _init() -> void:
 	var cs := CollisionShape2D.new()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(WIDTH, HEIGHT)
 	cs.shape = shape
 	cs.position = Vector2(0, -HEIGHT / 2.0)
 	add_child(cs)
+
+func _ready() -> void:
+	add_to_group("chests")
 
 func _process(delta: float) -> void:
 	_time += delta
@@ -69,11 +72,12 @@ func _open() -> void:
 	for i in how_many:
 		var item: Area2D = Powerup.new()
 		item.kind = LOOT_TABLE[randi() % LOOT_TABLE.size()]
-		get_tree().current_scene.add_child(item)
 		# spread them out above the chest so you can see them all
 		var spread := (float(i) - (how_many - 1) / 2.0) * 52.0
-		item.global_position = global_position + Vector2(spread, -HEIGHT - 42.0)
-		item._start_y = item.position.y
+		item.position = global_position + Vector2(spread, -HEIGHT - 42.0)
+		# added on the NEXT frame: a chest usually bursts open in the middle
+		# of a physics step, and things with collision can't join in then
+		get_tree().current_scene.add_child.call_deferred(item)
 
 	if players.size() > 0:
 		players[0].add_score(50)

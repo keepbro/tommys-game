@@ -11,6 +11,7 @@ const CHEST := preload("res://scripts/chest.gd")
 const POWERUP := preload("res://scripts/powerup.gd")
 const BOSS := preload("res://scripts/boss.gd")
 const HUD := preload("res://scripts/hud.gd")
+const PAUSE_MENU := preload("res://scripts/pause_menu.gd")
 const EXIT_PORTAL := preload("res://scripts/exit_portal.gd")
 
 # Every level is a list of instructions for building it.
@@ -93,7 +94,7 @@ const LEVELS := [
 		"wall_color": Color(0.40, 0.60, 0.72),
 		"start": Vector2(120, 620),
 		"exit": Vector2(1480, 345),
-		"boss_at": Vector2(1250, 600),
+		"boss_at": Vector2(1030, 615),
 		"camera": Rect2(-200, -300, 2200, 1080),
 		"kinds": ["slime", "bat", "brute"],
 		# Low ceilings and narrow ledges - tight squeeze!
@@ -110,7 +111,7 @@ const LEVELS := [
 			[Vector2(-60, 380), Vector2(120, 780), "wall"],
 			[Vector2(560, 130), Vector2(900, 60), "wall"],
 			[Vector2(1180, 430), Vector2(40, 300), "wall"],
-			[Vector2(1300, 560), Vector2(40, 300), "wall"],
+			[Vector2(1340, 560), Vector2(40, 300), "wall"],
 			[Vector2(1480, 400), Vector2(180, 20), "plat"],
 		],
 		"spawns": [
@@ -199,6 +200,7 @@ func _ready() -> void:
 	_set_camera_limits(data["camera"])
 
 	_build_level()
+	_build_edge_walls()
 	_create_exit()
 	_place_chests()
 	_place_items()
@@ -209,6 +211,7 @@ func _create_hud() -> void:
 	hud.player = player
 	$UI.add_child(hud)
 	player.message.connect(func(text: String, col: Color): hud.show_message(text, col))
+	$UI.add_child(PAUSE_MENU.new())
 
 func _set_camera_limits(area: Rect2) -> void:
 	var cam: Camera2D = player.get_node("Camera")
@@ -225,6 +228,35 @@ func _build_level() -> void:
 		elif p[2] == "wall":
 			color = data["wall_color"]
 		_platform(p[0], p[1], color)
+
+# Invisible walls right around the edge of every level, so you can't
+# run off the sides or fly off the top. They line up exactly with how
+# far the camera can see, so you never walk into empty space.
+# (The BOTTOM is left open on purpose - falling down a pit still counts!)
+func _build_edge_walls() -> void:
+	var area: Rect2 = data["camera"]
+	var thick := 80.0
+	var tall := area.size.y + 600.0
+	var wide := area.size.x + 600.0
+	var mid := area.get_center()
+
+	# left, right, and a ceiling across the top
+	_invisible_wall(Vector2(area.position.x - thick / 2.0, mid.y), Vector2(thick, tall))
+	_invisible_wall(Vector2(area.end.x + thick / 2.0, mid.y), Vector2(thick, tall))
+	_invisible_wall(Vector2(mid.x, area.position.y - thick / 2.0), Vector2(wide, thick))
+
+func _invisible_wall(pos: Vector2, size: Vector2) -> void:
+	var body := StaticBody2D.new()
+	body.position = pos
+	body.add_to_group("edge_walls")
+	add_child(body)
+
+	var cs := CollisionShape2D.new()
+	var shape := RectangleShape2D.new()
+	shape.size = size
+	cs.shape = shape
+	body.add_child(cs)
+	# no Polygon2D child, so there is nothing to see - just something to bump into
 
 func _place_chests() -> void:
 	for pos in data["chests"]:
@@ -325,8 +357,9 @@ func _on_enemy_died(points: int, where: Vector2) -> void:
 	if drop != "":
 		var pickup: Area2D = POWERUP.new()
 		pickup.kind = drop
-		add_child(pickup)
-		pickup.global_position = where
+		pickup.position = where
+		# next frame, for the same reason as the chest loot
+		add_child.call_deferred(pickup)
 
 func _spawn_boss() -> void:
 	boss_spawned = true
@@ -391,6 +424,4 @@ func _on_player_died() -> void:
 	await get_tree().create_timer(2.5).timeout
 	get_tree().reload_current_scene()
 
-func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		get_tree().quit()
+# ESC and P are handled by the pause menu now

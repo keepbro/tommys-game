@@ -117,7 +117,16 @@ signal died
 func _ready() -> void:
 	add_to_group("player")
 	coyote_timer.timeout.connect(func(): coyote_ok = false)
+	_wear_team_colours()
 	_equip("pistol")
+
+# Put on the armour of whichever team was chosen on the TEAM screen
+func _wear_team_colours() -> void:
+	var team: Dictionary = load("res://scripts/teams.gd").get_team(Sfx.team)
+	ARMOUR = team["armour"]
+	ARMOUR_LIGHT = team["light"]
+	ARMOUR_DARK = team["dark"]
+	CLOTH = team["cape"]
 
 # Wobble the camera! Called when things explode or you get hurt.
 func shake(amount: float) -> void:
@@ -384,13 +393,15 @@ func add_score(points: int) -> void:
 # A human knight in green armour, drawn with code so he can
 # run, jump, dash and wall-slide with proper poses.
 
-const ARMOUR := Color(0.20, 0.62, 0.32)
-const ARMOUR_LIGHT := Color(0.38, 0.85, 0.48)
-const ARMOUR_DARK := Color(0.10, 0.36, 0.20)
 const TRIM := Color(0.90, 0.80, 0.35)      # gold trim
 const SKIN := Color(0.96, 0.78, 0.62)
 const VISOR := Color(0.35, 0.95, 1.00)     # glowing blue visor
-const CLOTH := Color(0.55, 0.18, 0.22)     # his red cape
+
+# These come from whichever team you picked on the TEAM screen
+var ARMOUR := Color(0.20, 0.62, 0.32)
+var ARMOUR_LIGHT := Color(0.38, 0.85, 0.48)
+var ARMOUR_DARK := Color(0.10, 0.36, 0.20)
+var CLOTH := Color(0.55, 0.18, 0.22)       # his cape
 
 func _draw() -> void:
 	# Flip everything to face the way he's aiming

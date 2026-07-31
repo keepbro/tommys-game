@@ -7,35 +7,96 @@ extends Node
 const RATE := 22050  # how many numbers we make per second
 const VOICES := 10   # how many sounds can play at the same time
 
+const SETTINGS_PATH := "user://settings.cfg"
+const MUSIC_BASE_DB := -14.0   # music sits quietly under the sound effects
+
+# 0.0 = silent, 1.0 = full blast. Changed from the Settings screen.
+var music_volume := 0.7
+var sfx_volume := 0.8
+
+# Which of the four teams you picked on the TEAM screen
+var team := "green"
+
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _music_player: AudioStreamPlayer
 var _sounds := {}
 
 func _ready() -> void:
+	# keep the music and menu bleeps working while the game is paused
+	process_mode = Node.PROCESS_MODE_ALWAYS
+
 	for i in VOICES:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
 
 	_music_player = AudioStreamPlayer.new()
-	_music_player.volume_db = -14.0
 	add_child(_music_player)
 
+	load_settings()
 	_build_sounds()
 	_music_player.stream = _make_music()
+	_apply_music_volume()
 	_music_player.play()
 
 # Play a sound by name. pitch 1.0 = normal, 2.0 = twice as squeaky!
 func play(name: String, pitch := 1.0, volume_db := 0.0) -> void:
-	if not _sounds.has(name):
+	if not _sounds.has(name) or sfx_volume <= 0.0:
 		return
 	var p := _players[_next]
 	_next = (_next + 1) % VOICES
 	p.stream = _sounds[name]
 	p.pitch_scale = pitch
-	p.volume_db = volume_db
+	# turn the requested loudness down by however loud the player wants sounds
+	p.volume_db = volume_db + linear_to_db(sfx_volume)
 	p.play()
+
+# ---------- Volume settings ----------
+
+func set_music_volume(v: float) -> void:
+	music_volume = clampf(v, 0.0, 1.0)
+	_apply_music_volume()
+	save_settings()
+
+func set_sfx_volume(v: float) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
+	save_settings()
+
+func _apply_music_volume() -> void:
+	if music_volume <= 0.0:
+		_music_player.volume_db = -80.0   # basically off
+	else:
+		_music_player.volume_db = MUSIC_BASE_DB + linear_to_db(music_volume)
+
+func set_team(id: String) -> void:
+	team = id
+	save_settings()
+
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("audio", "music", music_volume)
+	cfg.set_value("audio", "sfx", sfx_volume)
+	cfg.set_value("video", "fullscreen", _is_fullscreen())
+	cfg.set_value("game", "team", team)
+	cfg.save(SETTINGS_PATH)
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) != OK:
+		return   # no settings saved yet, keep the defaults
+	music_volume = clampf(cfg.get_value("audio", "music", music_volume), 0.0, 1.0)
+	sfx_volume = clampf(cfg.get_value("audio", "sfx", sfx_volume), 0.0, 1.0)
+	team = str(cfg.get_value("game", "team", team))
+	set_fullscreen(cfg.get_value("video", "fullscreen", false))
+
+func _is_fullscreen() -> bool:
+	return DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+
+func set_fullscreen(on: bool) -> void:
+	DisplayServer.window_set_mode(
+		DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED)
+	save_settings()
 
 func stop_music() -> void:
 	_music_player.stop()
@@ -121,6 +182,12 @@ func _build_sounds() -> void:
 		var length := 0.5 if i == win.size() - 1 else 0.16
 		_add_tone(b, start, length, win[i], win[i], 0.30, "square")
 	_sounds["win"] = _to_stream(b)
+
+	# Menu click: a short friendly bleep
+	b = _new_buf(0.10)
+	_add_tone(b, 0.0, 0.05, 700.0, 700.0, 0.28, "square")
+	_add_tone(b, 0.05, 0.05, 1050.0, 1050.0, 0.28, "square")
+	_sounds["click"] = _to_stream(b)
 
 	# Game over: a sad slide down
 	b = _new_buf(1.3)
