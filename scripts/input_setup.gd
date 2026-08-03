@@ -5,6 +5,20 @@ func _ready() -> void:
 	_setup("dash", [_key(KEY_SHIFT)])
 	_setup("shoot", [_mouse(MOUSE_BUTTON_LEFT)])
 	_setup("pause", [_key(KEY_P)])
+
+	# VERSUS MODE: two players on one keyboard.
+	# Player 1 keeps A/D so the arrow keys belong to Player 2 alone.
+	_setup("p1_left", [_key(KEY_A)])
+	_setup("p1_right", [_key(KEY_D)])
+	_setup("p1_jump", [_key(KEY_W), _key(KEY_SPACE)])
+	_setup("p1_dash", [_key(KEY_SHIFT)])
+	_setup("p1_shoot", [_mouse(MOUSE_BUTTON_LEFT)])
+
+	_setup("p2_left", [_key(KEY_LEFT)])
+	_setup("p2_right", [_key(KEY_RIGHT)])
+	_setup("p2_jump", [_key(KEY_UP)])
+	_setup("p2_dash", [_key(KEY_CTRL)])
+	_setup("p2_shoot", [_key(KEY_ENTER), _key(KEY_KP_0)])
 	# Number keys 1-5 use the things in your bag
 	var number_keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]
 	for i in number_keys.size():

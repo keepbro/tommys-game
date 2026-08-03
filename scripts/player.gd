@@ -71,6 +71,24 @@ const WEAPONS := {
 	},
 }
 
+# Which keys this player uses.
+#   "solo" - the normal one-player game (WASD or arrows, mouse to aim)
+#   "p1"   - versus player 1: A/D, W to jump, mouse to aim
+#   "p2"   - versus player 2: arrow keys, and aims at the other player
+const CONTROLS := {
+	"solo": {"left": "ui_left", "right": "ui_right", "jump": "jump",
+		"dash": "dash", "shoot": "shoot"},
+	"p1": {"left": "p1_left", "right": "p1_right", "jump": "p1_jump",
+		"dash": "p1_dash", "shoot": "p1_shoot"},
+	"p2": {"left": "p2_left", "right": "p2_right", "jump": "p2_jump",
+		"dash": "p2_dash", "shoot": "p2_shoot"},
+}
+
+var controls := "solo"
+var instant_powerups := false   # in versus there's no bag, items work straight away
+var player_name := "PLAYER"
+
+var _aim := Vector2.RIGHT       # the point in the world we're aiming at
 var can_double_jump := true
 var is_dashing := false
 var dash_timer := 0.0
@@ -135,12 +153,15 @@ func shake(amount: float) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 
-	# Camera shake calms back down over time
-	if _shake_amount > 0.05:
-		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake_amount
-		_shake_amount = move_toward(_shake_amount, 0.0, delta * 55.0)
-	else:
-		camera.offset = Vector2.ZERO
+	# Camera shake calms back down over time. In versus both players share
+	# one camera, so we shake whichever camera is actually being used.
+	var cam := get_viewport().get_camera_2d()
+	if cam:
+		if _shake_amount > 0.05:
+			cam.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _shake_amount
+			_shake_amount = move_toward(_shake_amount, 0.0, delta * 55.0)
+		else:
+			cam.offset = cam.offset.move_toward(Vector2.ZERO, delta * 200.0)
 
 	# Flash white and flicker while you can't be hurt
 	_hurt_blink = false
@@ -167,15 +188,16 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 		return
 
+	var keys: Dictionary = CONTROLS[controls]
 	shoot_cooldown = maxf(0.0, shoot_cooldown - delta)
 	wall_jump_cooldown = maxf(0.0, wall_jump_cooldown - delta)
 	invincible_timer = maxf(0.0, invincible_timer - delta)
 	dash_timer = maxf(0.0, dash_timer - delta)
 	_tick_powerups(delta)
 
-	var mouse := get_global_mouse_position()
-	gun_pivot.look_at(mouse)
-	facing = -1.0 if mouse.x < global_position.x else 1.0
+	_aim = _aim_point()
+	gun_pivot.look_at(_aim)
+	facing = -1.0 if _aim.x < global_position.x else 1.0
 	# legs run faster the faster you go
 	_walk_cycle += absf(velocity.x) * delta * 0.045
 
@@ -198,13 +220,13 @@ func _physics_process(delta: float) -> void:
 		velocity.x = dash_dir * DASH_SPEED
 		velocity.y = 0.0
 	elif wall_jump_cooldown <= 0.0:
-		var dir := Input.get_axis("ui_left", "ui_right")
+		var dir := Input.get_axis(keys["left"], keys["right"])
 		velocity.x = move_toward(velocity.x, dir * move_speed, move_speed * 12.0 * delta)
 
 	if dash_timer <= 0.0:
 		is_dashing = false
 
-	if Input.is_action_just_pressed("jump"):
+	if Input.is_action_just_pressed(keys["jump"]):
 		if coyote_ok:
 			velocity.y = JUMP_FORCE
 			coyote_ok = false
@@ -221,19 +243,35 @@ func _physics_process(delta: float) -> void:
 			Sfx.play("double_jump")
 			_puff(Color(0.6, 0.8, 1.0))
 
-	if Input.is_action_just_pressed("dash") and not is_dashing:
+	if Input.is_action_just_pressed(keys["dash"]) and not is_dashing:
 		is_dashing = true
 		dash_timer = DASH_TIME
-		var dir := Input.get_axis("ui_left", "ui_right")
+		var dir := Input.get_axis(keys["left"], keys["right"])
 		dash_dir = dir if dir != 0.0 else facing
 		Sfx.play("dash")
 		shake(3.0)
 		_puff(Color(1, 1, 1))
 
-	if Input.is_action_pressed("shoot") and shoot_cooldown == 0.0:
+	if Input.is_action_pressed(keys["shoot"]) and shoot_cooldown == 0.0:
 		_shoot()
 
 	move_and_slide()
+
+# Where this player is aiming. Player 1 uses the mouse; player 2 has no
+# mouse, so their gun tracks the other player automatically.
+func _aim_point() -> Vector2:
+	if controls != "p2":
+		return get_global_mouse_position()
+	var foe := _find_foe()
+	if foe:
+		return foe.global_position
+	return global_position + Vector2(facing * 200.0, 0.0)
+
+func _find_foe() -> Node2D:
+	for other in get_tree().get_nodes_in_group("player"):
+		if other != self and is_instance_valid(other):
+			return other
+	return null
 
 func _tick_powerups(delta: float) -> void:
 	var changed := false
@@ -256,6 +294,15 @@ func collect_powerup(kind: String) -> bool:
 	elif WEAPONS.has(kind):
 		_equip(kind)
 		message.emit(kind.to_upper() + "!", WEAPONS[kind]["color"])
+	elif instant_powerups:
+		# versus mode has no bag - grab it and it works straight away
+		if kind == "medkit":
+			health = mini(health + 2, MAX_HEALTH)
+			health_changed.emit(health)
+		else:
+			powerups[kind] = POWERUP_TIME[kind]
+			powerups_changed.emit(powerups)
+		message.emit(kind.to_upper() + "!", Color(0.8, 1.0, 0.6))
 	else:
 		if inventory.size() >= BAG_SLOTS:
 			message.emit("BAG FULL!", Color(1, 0.6, 0.2))
@@ -307,7 +354,7 @@ func _shoot() -> void:
 		cooldown *= RAPID_MULTIPLIER
 	shoot_cooldown = cooldown
 
-	var aim := (get_global_mouse_position() - muzzle.global_position).normalized()
+	var aim := (_aim - muzzle.global_position).normalized()
 
 	# Work out all the angles we're firing at
 	var angles: Array[float] = []
@@ -325,11 +372,13 @@ func _shoot() -> void:
 			var Rocket := load("res://scripts/rocket.gd")
 			var r: Area2D = Rocket.new()
 			r.direction = aim.rotated(a)
+			r.shooter = self
 			get_tree().current_scene.add_child(r)
 			r.global_position = muzzle.global_position
 		else:
 			var b := bullet_scene.instantiate()
 			b.direction = aim.rotated(a)
+			b.shooter = self
 			b.speed = stats["speed"]
 			b.damage = stats["damage"]
 			b.pierce = stats["pierce"]

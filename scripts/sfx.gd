@@ -8,7 +8,7 @@ const RATE := 22050  # how many numbers we make per second
 const VOICES := 10   # how many sounds can play at the same time
 
 const SETTINGS_PATH := "user://settings.cfg"
-const MUSIC_BASE_DB := -14.0   # music sits quietly under the sound effects
+const MUSIC_BASE_DB := -9.0    # music sits quietly under the sound effects
 
 # 0.0 = silent, 1.0 = full blast. Changed from the Settings screen.
 var music_volume := 0.7
@@ -16,6 +16,59 @@ var sfx_volume := 0.8
 
 # Which of the four teams you picked on the TEAM screen
 var team := "green"
+
+# Your name, your friends list, and which friend you're playing versus
+var username := ""
+var friends: Array = []
+var requests: Array = []   # friend requests waiting to be accepted
+var playing_with := ""
+
+func set_username(name: String) -> void:
+	username = name.strip_edges().substr(0, 12).to_upper()
+	save_settings()
+
+# Sending a friend request. They aren't your friend until it's ACCEPTED.
+func send_request(name: String) -> String:
+	var clean := name.strip_edges().substr(0, 12).to_upper()
+	if clean == "":
+		return "empty"
+	if clean == username:
+		return "self"
+	if friends.has(clean):
+		return "already"
+	if requests.has(clean):
+		return "pending"
+	if friends.size() >= 6:
+		return "full"
+	requests.append(clean)
+	save_settings()
+	return "sent"
+
+func accept_request(name: String) -> void:
+	requests.erase(name)
+	if not friends.has(name):
+		friends.append(name)
+	if playing_with == "":
+		playing_with = name
+	save_settings()
+
+func decline_request(name: String) -> void:
+	requests.erase(name)
+	save_settings()
+
+func remove_friend(name: String) -> void:
+	friends.erase(name)
+	if playing_with == name:
+		playing_with = friends[0] if friends.size() > 0 else ""
+	save_settings()
+
+func set_playing_with(name: String) -> void:
+	playing_with = name
+	save_settings()
+
+# Who Player 2 is in versus mode
+func opponent_name() -> String:
+	return playing_with if playing_with != "" else "PLAYER 2"
 
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
@@ -79,6 +132,10 @@ func save_settings() -> void:
 	cfg.set_value("audio", "sfx", sfx_volume)
 	cfg.set_value("video", "fullscreen", _is_fullscreen())
 	cfg.set_value("game", "team", team)
+	cfg.set_value("game", "username", username)
+	cfg.set_value("game", "friends", friends)
+	cfg.set_value("game", "requests", requests)
+	cfg.set_value("game", "playing_with", playing_with)
 	cfg.save(SETTINGS_PATH)
 
 func load_settings() -> void:
@@ -88,6 +145,10 @@ func load_settings() -> void:
 	music_volume = clampf(cfg.get_value("audio", "music", music_volume), 0.0, 1.0)
 	sfx_volume = clampf(cfg.get_value("audio", "sfx", sfx_volume), 0.0, 1.0)
 	team = str(cfg.get_value("game", "team", team))
+	username = str(cfg.get_value("game", "username", ""))
+	friends = cfg.get_value("game", "friends", [])
+	requests = cfg.get_value("game", "requests", [])
+	playing_with = str(cfg.get_value("game", "playing_with", ""))
 	set_fullscreen(cfg.get_value("video", "fullscreen", false))
 
 func _is_fullscreen() -> bool:
@@ -253,31 +314,47 @@ func _to_stream(buf: PackedFloat32Array, looping := false) -> AudioStreamWAV:
 # ---------- Background music ----------
 
 func _make_music() -> AudioStreamWAV:
-	var step := 0.25          # how long one music step lasts
-	var steps := 32           # 32 steps = 8 seconds, then it loops forever
+	# A driving adventure tune in D minor - faster and punchier than the
+	# old one, with a rolling bass line underneath and a proper drum beat.
+	var step := 0.1875        # one music step (160 beats per minute)
+	var steps := 64           # 64 steps = 12 seconds before it loops
 	var buf := _new_buf(step * steps)
 
-	# The tune on top (0.0 means "rest" - stay quiet)
+	# The main tune on top. 0.0 means "rest" (stay quiet for a step).
 	var melody := [
-		440.0, 0.0, 523.25, 659.25, 0.0, 523.25, 440.0, 0.0,
-		392.0, 0.0, 523.25, 587.33, 0.0, 523.25, 392.0, 0.0,
-		440.0, 0.0, 659.25, 783.99, 0.0, 659.25, 523.25, 0.0,
-		587.33, 523.25, 440.0, 392.0, 440.0, 0.0, 0.0, 0.0,
+		587.33, 0.0, 698.46, 587.33, 880.0, 0.0, 783.99, 698.46,
+		587.33, 0.0, 523.25, 587.33, 0.0, 440.0, 0.0, 0.0,
+		523.25, 0.0, 659.25, 523.25, 783.99, 0.0, 698.46, 659.25,
+		523.25, 0.0, 466.16, 523.25, 0.0, 392.0, 0.0, 0.0,
+		698.46, 0.0, 880.0, 698.46, 1046.5, 0.0, 987.77, 880.0,
+		783.99, 0.0, 698.46, 659.25, 0.0, 587.33, 0.0, 0.0,
+		880.0, 987.77, 1046.5, 987.77, 880.0, 783.99, 698.46, 659.25,
+		587.33, 0.0, 0.0, 587.33, 0.0, 0.0, 0.0, 0.0,
 	]
 	for i in melody.size():
 		if melody[i] > 0.0:
-			_add_tone(buf, i * step, step * 0.9, melody[i], melody[i], 0.16, "square")
+			_add_tone(buf, i * step, step * 0.85, melody[i], melody[i], 0.15, "square")
+			# a quiet echo an octave up makes it sparkle
+			_add_tone(buf, i * step, step * 0.5, melody[i] * 2.0, melody[i] * 2.0,
+				0.045, "square")
 
-	# The deep bass notes underneath (one every 4 steps)
-	var bass := [110.0, 87.31, 130.81, 98.0, 110.0, 87.31, 130.81, 98.0]
+	# Rolling bass - two notes per bar so it bounces along
+	var bass := [
+		146.83, 220.0, 146.83, 174.61,   # D  A  D  F
+		130.81, 196.0, 130.81, 164.81,   # C  G  C  E
+		174.61, 261.63, 174.61, 220.0,   # F  C  F  A
+		196.0, 146.83, 196.0, 220.0,     # G  D  G  A
+	]
 	for i in bass.size():
-		_add_tone(buf, i * step * 4.0, step * 3.6, bass[i], bass[i], 0.20, "saw", false)
+		_add_tone(buf, i * step * 4.0, step * 3.5, bass[i], bass[i], 0.19, "saw", false)
 
-	# Drum beat every 2 steps
-	for i in range(0, steps, 2):
-		_add_tone(buf, i * step, 0.09, 150.0, 45.0, 0.28, "square")
-	# Hi-hat ticks on the off-beats
-	for i in range(1, steps, 2):
-		_add_tone(buf, i * step, 0.04, 1.0, 1.0, 0.07, "noise")
+	# Drums: a kick on every beat, a snare-ish crack on the off-beats
+	for i in range(0, steps, 4):
+		_add_tone(buf, i * step, 0.11, 170.0, 40.0, 0.30, "square")
+	for i in range(2, steps, 4):
+		_add_tone(buf, i * step, 0.07, 1.0, 1.0, 0.13, "noise")
+	# hi-hat ticking away on every step
+	for i in steps:
+		_add_tone(buf, i * step, 0.03, 1.0, 1.0, 0.05, "noise")
 
 	return _to_stream(buf, true)

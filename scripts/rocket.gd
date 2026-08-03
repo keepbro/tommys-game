@@ -8,6 +8,7 @@ const BLAST_RADIUS := 140.0
 const BLAST_DAMAGE := 3
 
 var direction := Vector2.RIGHT
+var shooter: Node = null   # who fired it
 var lifetime := 3.0
 var _time := 0.0
 var _smoke := 0.0
@@ -64,7 +65,7 @@ func _draw() -> void:
 		Vector2(-12, -4), Vector2(-12 - flame, 0), Vector2(-12, 4)]), Color(1, 0.75, 0.2, 0.9))
 
 func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("player"):
+	if body == shooter:
 		return
 	_boom()
 
@@ -88,8 +89,11 @@ func _boom() -> void:
 		if is_instance_valid(target) and global_position.distance_to(target.global_position) < BLAST_RADIUS:
 			target.take_damage(BLAST_DAMAGE)
 
-	var players := get_tree().get_nodes_in_group("player")
-	if players.size() > 0:
-		players[0].shake(14.0)
+	# In versus the blast catches the OTHER player too (never the firer)
+	for pl in get_tree().get_nodes_in_group("player"):
+		if is_instance_valid(pl):
+			pl.shake(14.0)
+			if pl != shooter and global_position.distance_to(pl.global_position) < BLAST_RADIUS:
+				pl.take_damage()
 
 	queue_free()

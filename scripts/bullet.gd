@@ -13,6 +13,8 @@ var color := Color(1.0, 0.75, 0.1)
 var size := 5.0
 var lifetime := 2.0
 
+var shooter: Node = null   # who fired it - so you can't shoot yourself
+
 var _trail := []  # remembers where the bullet just was, to draw a streak
 var _hits := 0
 
@@ -40,7 +42,9 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, size * 0.45, Color(1, 1, 1, 0.95))
 
 func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("player"):
+	# your own bullets never hurt you - but in versus they DO hurt the
+	# other player, which is the whole point!
+	if body == shooter:
 		return
 
 	if body.has_method("take_damage"):

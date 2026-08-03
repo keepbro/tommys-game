@@ -6,9 +6,10 @@ extends Control
 const GAME_SCENE := preload("res://scenes/main.tscn")
 const GameMain := preload("res://scripts/main.gd")
 const Teams := preload("res://scripts/teams.gd")
+const WordFilter := preload("res://scripts/word_filter.gd")
 const LOAD_TIME := 1.6         # how long the loading bar takes to fill
 
-enum Screen { LOADING, TITLE, TEAM, SETTINGS }
+enum Screen { LOADING, USERNAME, TITLE, TEAM, SETTINGS, FRIENDS }
 
 var screen := Screen.LOADING
 var _time := 0.0
@@ -18,7 +19,17 @@ var _stars := []
 var _title_panel: Control
 var _team_panel: Control
 var _settings_panel: Control
+var _friends_panel: Control
+var _username_panel: Control
 var _team_buttons := {}
+var _friend_rows: Control
+var _name_box: LineEdit
+var _friend_box: LineEdit
+var _result_row: Control
+var _result_label: Label
+var _result_add: Button
+var _search_name := ""
+var _name_hint: Label
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -39,7 +50,10 @@ func _ready() -> void:
 	_title_panel = _build_title_screen()
 	_team_panel = _build_team_screen()
 	_settings_panel = _build_settings_screen()
-	for panel in [_title_panel, _team_panel, _settings_panel]:
+	_friends_panel = _build_friends_screen()
+	_username_panel = _build_username_screen()
+	for panel in [_title_panel, _team_panel, _settings_panel,
+			_friends_panel, _username_panel]:
 		panel.visible = false
 		add_child(panel)
 
@@ -56,8 +70,12 @@ func _process(delta: float) -> void:
 	if screen == Screen.LOADING:
 		_load_progress = minf(1.0, _load_progress + delta / LOAD_TIME)
 		if _load_progress >= 1.0:
-			_show(Screen.TITLE)
-			_focus_first_button(_title_panel)   # so ENTER works right away
+			if Sfx.username == "":
+				_show(Screen.USERNAME)          # you need a name before you can play
+				_name_box.grab_focus()
+			else:
+				_show(Screen.TITLE)
+				_focus_first_button(_title_panel)   # so ENTER works right away
 
 	queue_redraw()
 
@@ -66,6 +84,8 @@ func _show(which: int) -> void:
 	_title_panel.visible = which == Screen.TITLE
 	_team_panel.visible = which == Screen.TEAM
 	_settings_panel.visible = which == Screen.SETTINGS
+	_friends_panel.visible = which == Screen.FRIENDS
+	_username_panel.visible = which == Screen.USERNAME
 	queue_redraw()   # repaint the background straight away, no flicker
 
 func _input(event: InputEvent) -> void:
@@ -79,7 +99,9 @@ func _input(event: InputEvent) -> void:
 
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	if screen == Screen.TEAM or screen == Screen.SETTINGS:
+	if screen == Screen.USERNAME:
+		return                       # you can't skip picking a name
+	if screen in [Screen.TEAM, Screen.SETTINGS, Screen.FRIENDS]:
 		_show(Screen.TITLE)          # ESC goes back to the title
 		_focus_first_button(_title_panel)
 	elif screen == Screen.TITLE:
@@ -98,15 +120,22 @@ func _build_title_screen() -> Control:
 	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	panel.add_child(_button("PLAY", Vector2(490, 330), Vector2(300, 74),
-		Color(0.25, 0.75, 0.35), _on_play, 34))
-	panel.add_child(_rainbow_button("TEAM", Vector2(490, 420), Vector2(300, 62),
+	panel.add_child(_button("PLAY", Vector2(490, 288), Vector2(300, 64),
+		Color(0.25, 0.75, 0.35), _on_play, 32))
+	panel.add_child(_button("VERSUS", Vector2(490, 360), Vector2(300, 56),
+		Color(0.90, 0.45, 0.15), _on_versus, 26))
+	panel.add_child(_rainbow_button("TEAM", Vector2(490, 424), Vector2(300, 52),
 		func(): _show(Screen.TEAM)))
-	panel.add_child(_button("SETTINGS", Vector2(490, 496), Vector2(300, 62),
-		Color(0.55, 0.40, 0.80), func(): _show(Screen.SETTINGS)))
-	panel.add_child(_button("QUIT", Vector2(490, 572), Vector2(300, 62),
-		Color(0.75, 0.28, 0.28), _on_quit))
+	panel.add_child(_button("FRIENDS", Vector2(490, 484), Vector2(300, 52),
+		Color(0.25, 0.60, 0.75), func(): _show(Screen.FRIENDS), 24))
+	panel.add_child(_button("SETTINGS", Vector2(490, 544), Vector2(300, 52),
+		Color(0.55, 0.40, 0.80), func(): _show(Screen.SETTINGS), 24))
+	panel.add_child(_button("QUIT", Vector2(490, 604), Vector2(300, 52),
+		Color(0.75, 0.28, 0.28), _on_quit, 24))
 	return panel
+
+func _on_versus() -> void:
+	get_tree().change_scene_to_file("res://scenes/versus.tscn")
 
 func _build_team_screen() -> Control:
 	var panel := Control.new()
@@ -189,11 +218,210 @@ func _build_settings_screen() -> Control:
 		Sfx.set_fullscreen(on))
 	panel.add_child(full)
 
+	# A button to check the sound is actually coming out of the speakers
+	var test := _button("TEST SOUND", Vector2(700, 408), Vector2(190, 46),
+		Color(0.30, 0.60, 0.45), _play_test_tune, 22)
+	panel.add_child(test)
+
 	panel.add_child(_label("Your settings are saved automatically.",
 		Vector2(0, 500), 17, Color(1, 1, 1, 0.5)))
 	panel.add_child(_button("BACK", Vector2(540, 578), Vector2(200, 56),
 		Color(0.45, 0.45, 0.5), func(): _show(Screen.TITLE)))
 	return panel
+
+
+# ---------- Pick a username before you can play ----------
+
+func _build_username_screen() -> Control:
+	var panel := Control.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	panel.add_child(_label("WELCOME TO SHOOTO!", Vector2(0, 200), 44, Color(1, 0.9, 0.4)))
+	panel.add_child(_label("What shall we call you?", Vector2(0, 268), 24, Color(1, 1, 1, 0.85)))
+
+	_name_box = _line_edit(Vector2(440, 320), Vector2(400, 58), "type your username", 12)
+	_name_box.text_submitted.connect(func(_t: String): _save_username())
+	panel.add_child(_name_box)
+
+	_name_hint = _label("up to 12 letters", Vector2(0, 392), 17, Color(1, 1, 1, 0.5))
+	panel.add_child(_name_hint)
+
+	panel.add_child(_button("START", Vector2(520, 430), Vector2(240, 60),
+		Color(0.25, 0.75, 0.35), _save_username, 30))
+	return panel
+
+func _save_username() -> void:
+	var wanted := _name_box.text.strip_edges()
+	if wanted.length() < 2:
+		_name_hint.text = "Your name needs at least 2 letters!"
+		_name_hint.add_theme_color_override("font_color", Color(1, 0.5, 0.4))
+		Sfx.play("hurt", 1.6, -8.0)
+		return
+	if not WordFilter.is_clean(wanted):
+		_name_hint.text = "That's a naughty word - pick a nicer name!"
+		_name_hint.add_theme_color_override("font_color", Color(1, 0.5, 0.4))
+		Sfx.play("hurt", 1.4, -8.0)
+		_name_box.text = ""
+		return
+	Sfx.set_username(wanted)
+	Sfx.play("powerup")
+	_show(Screen.TITLE)
+	_focus_first_button(_title_panel)
+
+# ---------- Friends: search a username, then add them ----------
+
+func _build_friends_screen() -> Control:
+	var panel := Control.new()
+	panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	panel.add_child(_label("FRIENDS", Vector2(0, 108), 42, Color(1, 0.9, 0.4)))
+	panel.add_child(_label("Search for a player's username", Vector2(0, 162), 18,
+		Color(1, 1, 1, 0.7)))
+
+	_friend_box = _line_edit(Vector2(350, 192), Vector2(370, 46), "username", 12)
+	_friend_box.text_submitted.connect(func(_t: String): _do_search())
+	panel.add_child(_friend_box)
+	panel.add_child(_button("SEARCH", Vector2(740, 192), Vector2(160, 46),
+		Color(0.25, 0.60, 0.75), _do_search, 22))
+
+	# the player we found, with an ADD FRIEND button next to them
+	_result_row = Control.new()
+	_result_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_result_row.visible = false
+	_result_label = _label("", Vector2(-160, 258), 26, Color(0.6, 1.0, 0.7))
+	_result_row.add_child(_result_label)
+	_result_add = _button("+ SEND REQUEST", Vector2(680, 250), Vector2(220, 42),
+		Color(0.25, 0.70, 0.40), _add_searched, 19)
+	_result_row.add_child(_result_add)
+	panel.add_child(_result_row)
+
+	_friend_rows = Control.new()
+	_friend_rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(_friend_rows)
+
+	panel.add_child(_button("BACK", Vector2(540, 578), Vector2(200, 56),
+		Color(0.45, 0.45, 0.5), func(): _show(Screen.TITLE)))
+	_refresh_friends()
+	return panel
+
+func _do_search() -> void:
+	var name := _friend_box.text.strip_edges().substr(0, 12).to_upper()
+	if name == "":
+		return
+	_search_name = name
+	_result_label.text = name
+	_result_row.visible = true
+	Sfx.play("click")
+
+	if not WordFilter.is_clean(name):
+		_result_label.text = "?????"
+		_result_add.text = "NAUGHTY WORD!"
+		_result_add.disabled = true
+		Sfx.play("hurt", 1.4, -8.0)
+	elif name == Sfx.username:
+		_result_add.text = "THAT'S YOU!"
+		_result_add.disabled = true
+	elif Sfx.friends.has(name):
+		_result_add.text = "ALREADY FRIENDS"
+		_result_add.disabled = true
+	elif Sfx.requests.has(name):
+		_result_add.text = "REQUEST SENT"
+		_result_add.disabled = true
+	elif Sfx.friends.size() >= 6:
+		_result_add.text = "LIST FULL"
+		_result_add.disabled = true
+	else:
+		_result_add.text = "+ SEND REQUEST"
+		_result_add.disabled = false
+
+func _add_searched() -> void:
+	if Sfx.send_request(_search_name) == "sent":
+		Sfx.play("powerup")
+		_result_add.text = "REQUEST SENT!"
+		_result_add.disabled = true
+		_friend_box.text = ""
+		_refresh_friends()
+
+# Rebuilds the friend requests and the friends list underneath
+func _refresh_friends() -> void:
+	for row in _friend_rows.get_children():
+		row.queue_free()
+
+	var y := 312.0
+
+	# --- requests waiting to be accepted ---
+	if not Sfx.requests.is_empty():
+		_friend_rows.add_child(_label("FRIEND REQUESTS", Vector2(0, y), 18,
+			Color(1, 0.85, 0.4)))
+		y += 26.0
+		for name in Sfx.requests:
+			_friend_rows.add_child(_label(name, Vector2(-250, y + 3), 20,
+				Color(1, 1, 1, 0.9)))
+			_friend_rows.add_child(_button("ACCEPT", Vector2(600, y), Vector2(130, 32),
+				Color(0.25, 0.72, 0.40), func(): _accept(name), 17))
+			_friend_rows.add_child(_button("NO", Vector2(742, y), Vector2(60, 32),
+				Color(0.60, 0.28, 0.28), func(): _decline(name), 17))
+			y += 38.0
+		y += 10.0
+
+	# --- friends you've already accepted ---
+	if Sfx.friends.is_empty():
+		_friend_rows.add_child(_label("No friends yet - search for someone above!",
+			Vector2(0, y + 8), 18, Color(1, 1, 1, 0.45)))
+		return
+
+	_friend_rows.add_child(_label("YOUR FRIENDS  (tap one to pick your VERSUS rival)",
+		Vector2(0, y), 17, Color(1, 1, 1, 0.55)))
+	y += 26.0
+
+	for name in Sfx.friends:
+		var chosen: bool = name == Sfx.playing_with
+		_friend_rows.add_child(_button(name + ("   < RIVAL" if chosen else ""),
+			Vector2(370, y), Vector2(400, 32),
+			Color(0.30, 0.65, 0.45) if chosen else Color(0.22, 0.24, 0.34),
+			func(): _choose_opponent(name), 18))
+		_friend_rows.add_child(_button("X", Vector2(782, y), Vector2(34, 32),
+			Color(0.6, 0.25, 0.25), func(): _drop_friend(name), 16))
+		y += 36.0
+
+func _accept(name: String) -> void:
+	Sfx.accept_request(name)
+	Sfx.play("win", 1.3, -6.0)
+	_refresh_friends()
+
+func _decline(name: String) -> void:
+	Sfx.decline_request(name)
+	Sfx.play("click", 0.7)
+	_refresh_friends()
+
+func _choose_opponent(name: String) -> void:
+	Sfx.set_playing_with(name)
+	_refresh_friends()
+
+func _drop_friend(name: String) -> void:
+	Sfx.remove_friend(name)
+	_refresh_friends()
+
+func _line_edit(pos: Vector2, size: Vector2, hint: String, max_len: int) -> LineEdit:
+	var e := LineEdit.new()
+	e.position = pos
+	e.size = size
+	e.placeholder_text = hint
+	e.max_length = max_len
+	e.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	e.add_theme_font_size_override("font_size", 24)
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.10, 0.12, 0.20)
+	box.set_corner_radius_all(8)
+	box.set_border_width_all(2)
+	box.border_color = Color(1, 1, 1, 0.35)
+	box.content_margin_left = 10.0
+	box.content_margin_right = 10.0
+	e.add_theme_stylebox_override("normal", box)
+	e.add_theme_stylebox_override("focus", box)
+	return e
 
 func _on_play() -> void:
 	# The level is baked in with `preload`, so it is already in memory here -
@@ -202,6 +430,12 @@ func _on_play() -> void:
 	GameMain.level = 1              # always start a fresh game from level 1
 	if err != OK:
 		push_error("Could not start the game! error code %d" % err)
+
+# Plays a little tune so you can check your speakers are working
+func _play_test_tune() -> void:
+	for sound in ["jump", "powerup", "pop", "win"]:
+		Sfx.play(sound)
+		await get_tree().create_timer(0.35).timeout
 
 func _on_quit() -> void:
 	# let the click bleep finish before the window closes
